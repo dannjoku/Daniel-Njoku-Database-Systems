@@ -40,8 +40,8 @@ PRIMARY KEY(pid)
 
 /* Guests */
 CREATE TABLE guests (
-    gid             INTEGER    NOT NULL  REFERENCES persons(pid),
-    memberStatus    VARCHAR    NOT NULL	 CHECK
+    gid             INTEGER         NOT NULL  REFERENCES persons(pid),
+    memberStatus    VARCHAR         NOT NULL	 CHECK
     (memberStatus IN ('Bronze', 'Silver','Gold', 'Platinum', 'Diamond')),
 PRIMARY KEY(gid)    
 );
@@ -77,7 +77,7 @@ PRIMARY KEY(rsid)
 /* Rooms */
 CREATE TABLE rooms (
     roomNumber      VARCHAR(5)         NOT NULL,
-    rsid            INTEGER            NOT NULL  REFERENCES style(rsid),        
+    rsid            INTEGER            NOT NULL  REFERENCES style(rsid),    
     priceUSD        DECIMAL            NOT NULL,
 PRIMARY KEY(roomNumber) 
 );
@@ -138,9 +138,9 @@ CREATE TABLE guestReservation (
     gid                 INTEGER     NOT NULL REFERENCES guests(gid),
     roomNumber          VARCHAR(5)  NOT NULL REFERENCES rooms(roomNumber),
     sid                 INTEGER     NOT NULL REFERENCES staff(sid),
-    checkInDate         TIMESTAMP   NOT NULL,
-    checkOutDate        TIMESTAMP   NOT NULL,
-    discountPercentage  DECIMAL     NOT NULL,
+    checkInDate         TIMESTAMP,
+    checkOutDate        TIMESTAMP,
+    discountPercentage  DECIMAL,
 PRIMARY KEY(gid,roomNumber,checkInDate)
 );
 
@@ -284,10 +284,10 @@ VALUES  (011, 1, 3, '2015-02-11', 15.25),
 		(014, 1, 2, '2015-08-12', 10.25),
 		(015, 1, 0, '2015-11-12', 10.25),
 		(016, 1, 2, '2015-02-13', 13.25),
-		(017, 2, 0, '2015-02-11', 10.25),
-		(018, 2, 1, '2015-12-17', 11.25),
-		(019, 2, 2, '2015-12-11', 9.25),
-		(020, 2, 3, '2015-02-11', 9.25);
+		(017, 2, 2, '2015-02-11', 10.25),
+		(018, 2, 3, '2015-12-17', 11.25),
+		(019, 2, 1, '2015-12-11', 9.25),
+		(020, 2, 0, '2015-02-11', 9.25);
         
 
 INSERT INTO roomCall (gid,roomNumber,callCode,callTime,sid)
@@ -300,7 +300,7 @@ INSERT INTO roomCleaning (roomNumber,timeOfEntry,sid,timeOfExit)
 VALUES  (101, '12:00:00', 017, '12:30:00'),
 		(105, '14:00:00', 017, '14:30:00'),
 		(103, '15:00:00', 017, '15:30:00'),
-		(201, '16:00:00', 017, '16:30:00');
+		(201, '20:00:00', 018, '22:30:00');
         
 
 
@@ -315,3 +315,99 @@ VALUES	(001, 101, 013, '2016-04-21', '2016-04-23', 0),
         (008, 203, 013, '2016-04-22', '2016-04-26', 10),
         (009, 204, 013, '2016-04-21', '2016-04-23', 0),
         (010, 205, 013, '2016-04-24', '2016-04-27', 12.5);
+
+
+
+
+/* Track what guessed have checked out of the hotel on April 23, 2016*/
+CREATE OR REPLACE VIEW GuestRooms AS
+SELECT 	DISTINCT per.firstName, per.lastName 
+FROM    persons per, guests g, guestReservation gr, rooms r
+WHERE   per.pid = g.gid
+AND     gr.gid = g.gid
+AND     gr.checkOutDate = '2016-04-23'
+ORDER BY per.lastname ASC;
+
+
+/*Keeps a record of each employee throughout the hotel*/
+    CREATE OR REPLACE VIEW staffInformation AS
+        SELECT per.firstName, per.lastName, s.hireDate, s.hourlyWageUSD
+        FROM    persons per, staff s
+        WHERE   s.sid = per.pid
+        ORDER BY per.pid DESC;
+
+
+
+/*Average amount of time each employeeit takes to clean a room*/
+SELECT s.sid As Cleaner,
+    avg(rc.timeOfExit - rc.timeOfEntry) AS AverageCleaningTime
+FROM    staff s, roomCleaning rc
+WHERE rc.timeOfExit IS NOT NULL
+AND   s.sid = rc.sid
+GROUP BY s.sid;
+
+
+/*Average amount of time guest stays in hotel*/
+SELECT gr.gid as GuestStay,
+    avg(gr.checkOutDate - gr.checkInDate)  AS AverageTimeStay
+FROM    guestReservation gr, guests g, rooms r
+WHERE   gr.checkOutDate IS NOT NULL
+AND     r.roomNumber = gr.roomNumber
+GROUP BY GuestStay;
+
+
+/*Stored Procedure*/
+CREATE OR REPLACE FUNCTION insertStaff() RETURNS trigger AS $$
+    BEGIN
+    IF NEW.sid IS NULL THEN 
+        RAISE EXCEPTION 'Invalid sid given';
+    END IF;
+    IF NEW.spid IS NULL THEN
+        RAISE EXCEPTION 'What is staff members position?';
+    END IF;
+    IF NEW.shid IS NULL THEN
+        RAISE EXCEPTION 'Employee must choose a shift to work.';
+    END IF;
+    IF NEW.hireDate IS NULL THEN
+        RAISE EXCEPTION 'When was this employee hired?';
+    END IF;
+     IF NEW.hourlyWageUSD IS NULL THEN
+        RAISE EXCEPTION 'Employee must recieve a wage.';
+    END IF;
+    INSERT INTO staff (sid,spid,shid,hireDate,hourlyWageUSD)
+            VALUES (NEW.sid, NEW.spid, NEW.shid, 'now', NEW.hourlyWageUSD);
+    RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+
+/*Trigger*/
+CREATE TRIGGER insertStaff
+AFTER UPDATE ON staff
+FOR EACH ROW 
+EXECUTE PROCEDURE  insertRoomCleaning();
+
+
+
+/*Security*/
+
+/*guest*/
+GRANT INSERT ON roomCalls TO guests; 
+
+/*administration*/
+GRANT SELECT ON location TO administration;
+GRANT SELECT, UPDATE ON rooms TO Administration;
+GRANT SELECT, UPDATE ON style TO Administration;
+GRANT SELECT, UPDATE ON roomCleaning TO Administration;
+GRANT SELECT, INSERT, UPDATE ON shiftDays TO Administration;
+GRANT SELECT, INSERT, UPDATE ON roomCalls TO Administration;
+GRANT SELECT, INSERT, UPDATE ON callCodes TO Administration;
+GRANT SELECT, INSERT, UPDATE ON persons TO Administration;
+GRANT SELECT, INSERT, UPDATE ON guests TO Administration;
+GRANT SELECT, INSERT, UPDATE ON staff TO Administration;
+GRANT SELECT, INSERT, UPDATE, DELETE ON staffPosition TO Administration;
+GRANT SELECT, INSERT, UPDATE, DELETE ON shifts TO Administration;
+GRANT SELECT, INSERT, UPDATE ON, DELETE ON guestReservation TO Administration;
+
+/*house*/
+GRANT SELECT, INSERT, UPDATE ON roomCleaning TO cleaner;
