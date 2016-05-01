@@ -1,0 +1,40 @@
+--Daniel Njoku--
+--Database Systems--
+--Professor Labouseur--
+--April 19, 2016--
+--Stored Procs--
+
+--Question 1--
+CREATE OR REPLACE FUNCTION preReqFor (int, REFCURSOR) 
+RETURNS REFCURSOR AS $$
+DECLARE
+    addCourseNum int :=1;
+    resultset REFCURSOR :=2;
+BEGIN
+    OPEN resultset FOR 
+		SELECT preReqNum
+		FROM Prerequisites as P
+		WHERE P.coursenum = addCourseNum); 
+    RETURN resultset;
+END;
+$$
+language plpsql;
+
+--optional question--
+
+
+--Question 2--
+CREATE OR REPLACE FUNCTION isPreReqFor (int, REFCURSOR)
+RETURNS REFCURSOR AS $$
+DECLARE
+    addPreReqNum int :=1;
+    resultset REFCURSOR :=2;
+BEGIN
+    OPEN resultset FOR 
+		SELECT courseNum
+		FROM Prerequisites as P
+		WHERE P.preReqNum = addPreReqNum );
+    RETURN resultset;
+END;
+$$
+language plpsql;
